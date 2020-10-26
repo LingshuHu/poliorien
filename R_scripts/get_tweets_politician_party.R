@@ -13,9 +13,10 @@ library(tidyverse)
 #############################################################
 ##### use this 
 
-df <- read.csv("data/cong116_politician_party.csv")
-df$user_id <- as.character(df$user_id)
+df <- read.csv("data/cong116_politician_twitter.csv", stringsAsFactors = F)
+df$user_id <- as.character(as.numeric(df$user_id))
 
+df2 <- df[!duplicated(df$screen_name), ]
 df2 <- df[!duplicated(df$user_id), ]
 df2[df2$user_id == "168673083", ]
 
@@ -27,20 +28,14 @@ table(duplicated(dupl$screen_name))
 ## get their tweets
 
 
-urs <- unique(rt2$user_id)
-saveRDS(urs, "data/covid_usa_jan24-mar20_21pm-23pm_onesixth_userid.rds")
-urs <- readRDS("data/covid_usa_jan24-mar20_21pm-23pm_onesixth_userid.rds")
 
-saveRDS(urs2, "data/covid_usa_jan24-mar20_21pm-23pm_twosixth_userid.rds")
-urs2 <- readRDS("data/covid_usa_jan24-mar20_21pm-23pm_twosixth_userid.rds")
-
-wait_search <- function(s, t, inu = NULL, tm = 60*14, uids, n) {
+wait_search <- function(s, t, id, inu = NULL, uids, n) {
   token <- get_tokens()
   lst <- vector("list") # empty list
   
   if(n <= 200) { # calculate number of quires
     rq = 1
-  } else {rq = ceiling(3200/n)}
+  } else {rq = ceiling(n/200)}
   
   if(is.null(inu)) { # max number of users can get per search
     inu <- floor((1500)/rq)
@@ -50,7 +45,7 @@ wait_search <- function(s, t, inu = NULL, tm = 60*14, uids, n) {
     tryCatch(
       rt <- rtweet::get_timeline(uids[st:en], 
                                  n = n, 
-                                 token = rtweet::bearer_token(),
+                                 token = rtweet::bearer_token(), 
                                  check = F),
       error = function(e) NULL
     )
@@ -66,12 +61,21 @@ wait_search <- function(s, t, inu = NULL, tm = 60*14, uids, n) {
     if(e > t) {
       e <- t
     } 
+    time_s <- Sys.time()
     lst[[i]] <- gt(st = s, en = e)
-    s <- which(uids == lst[[i]]$user_id[nrow(lst[[i]])]) + 1
+    time_e <- Sys.time()
+    time_diff <- as.numeric(time_e - time_s, units = "secs")
+    #s <- e + 1 
+    if (id == "screen_name") {
+      s <- which(uids == lst[[i]]$screen_name[nrow(lst[[i]])]) + 1
+    } else {
+      s <- which(uids == lst[[i]]$user_id[nrow(lst[[i]])]) + 1
+    }
+    
     i <- i + 1
-    if(s < t) {
-      message(paste0("waiting about ", tm/60, " minutes"))
-      Sys.sleep(tm)
+    if (s < t & time_diff < 910) {
+      message(paste0("waiting about ", (910 - time_diff)/60, " minutes"))
+      Sys.sleep(910 - time_diff)
     }
   }
   #lst <- do.call("rbind", lst)
@@ -79,7 +83,10 @@ wait_search <- function(s, t, inu = NULL, tm = 60*14, uids, n) {
 }
 
 library(lubridate)
-user_tweets <- wait_search(s = 1, t = 1040, tm = 60*10, uids = df2$user_id, n = 1000)
+
+u <- rtweet::get_timeline(df2$screen_name[1000], n = 100)
+
+user_tweets <- wait_search(s = 1, t = 1041, id = "screen_name", uids = df2$screen_name, n = 3200)
 
 user_tweets3 <- subset(user_tweets2, !(status_id %in% user_tweets$status_id))
 
@@ -92,6 +99,7 @@ user_tweets3 <- user_tweets[!duplicated(user_tweets$status_id), ]
 
 user_tweets4 <- dplyr::left_join(user_tweets3, df2[, -3], by = "user_id")
 
+saveRDS(user_tweets2, "data/cong_politician_tweets_2020-7-5.rds")
 saveRDS(user_tweets3, "data/cong_politician_tweets_2020-4-16.rds")
 
 user_tweets <- readRDS("data/cong_politician_tweets_2020-3-12.rds")
@@ -135,33 +143,54 @@ textcat::textcat(df$description[5])
 
 
 ####################################################################
-## get random tweets/twitter
+## classify political orientation based on score of each tweet
+library(dplyr)
 
-tw <- list()
-while(TRUE) {
-  tw[[length(tw) + 1]] <-
-    rtweet::search_tweets("-filter:verified", n = 10000)
-  Sys.sleep(runif(1, 0, 60*60*1))
+pt <- rtweet::read_twitter_csv("../coronavirus/user_tweets_for_ideology/covid_users30tweets_usa_apr11-may25_21pm-23pm_onethird_2_party.csv")
+poli <- rtweet::read_twitter_csv("../coronavirus/user_tweets_for_ideology/covid_users30tweets_usa_apr11-may25_21pm-23pm_onethird_2_poli.csv")
+party <- rtweet::read_twitter_csv(paste0("../coronavirus/user_tweets_for_ideology/", 
+                                         files[1], "_party.csv"))
+
+
+get_user_party <- function(path, filename) {
+  party <- rtweet::read_twitter_csv(paste0(path, filename, "_party.csv"))
+  poli <- rtweet::read_twitter_csv(paste0(path, filename, "_poli.csv"))
+  user <- rtweet::read_twitter_csv(paste0(path, filename, "_tweets.csv"))
+  
+  df <- cbind(user[, c("status_id", "user_id", "screen_name")], poli[, "poli"], party)
+  df <- df[df$poli, ]
+  classify_party <- function(x) {
+    if (x < 0.3) {p = "D"}
+    else if (x > 0.7) {p = "R"}
+    else {p = "N"}
+    return(p)
+  }
+  getmode <- function(v) {
+    uniqv <- unique(v)
+    uniqv[which.max(tabulate(match(v, uniqv)))]
+  }
+  df <- dplyr::mutate(df, partyc = sapply(party, classify_party))
+  df_user <- df %>% group_by(user_id) %>% summarise(user_partyc = getmode(partyc),
+                                                    poli_tweets = n())
+  return(df_user)
 }
 
-saveRDS(dftw, "data/randomtweets.rds")
 
-dftw <- do.call("rbind", tw)
+ut <- get_user_party("../coronavirus/user_tweets_for_ideology/", 
+                     "covid_users30tweets_usa_apr11-may25_21pm-23pm_onethird_2")
+ut2 <- ut[ut$poli_tweets>3, ]
 
-head(dftw)
+# multiple datasets at once
+files <- list.files(path = '../coronavirus/user_tweets_for_ideology', pattern = '*tweets.csv', full.names = FALSE)
+files <- sub("_tweets\\.csv", "", files)
 
-names(dftw)
+ut_party <- lapply(files, function(x) get_user_party(path = '../coronavirus/user_tweets_for_ideology/', filename = x))
 
-dftw_en <- dplyr::filter(dftw, lang == "en")
+ut_party2 <- do.call("rbind", ut_party)
 
-dftw_en_user <- dftw_en[!duplicated(dftw_en$user_id), ]
+saveRDS(ut_party2, "../coronavirus/user_tweets_for_ideology/user_party_poli_jan24-may25_21pm-23pm_onethird.rds")
 
-saveRDS(dftw_en_user, "data/randomuser20190827-29.rds")
 
-#install.packages("tweetbotornot")
-devtools::install_github("mkearney/tweetbotornot")
-library(tweetbotornot)
 
-df <- readRDS("data/randomuser20190827-29.rds")
 
-bots <- tweetbotornot::tweetbotornot(df$user_id, fast = TRUE)
+
