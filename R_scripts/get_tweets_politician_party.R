@@ -30,8 +30,8 @@ table(duplicated(dupl$screen_name))
 
 
 wait_search <- function(s, t, id, inu = NULL, uids, n) {
-  #token <- get_tokens()
-  
+  token <- get_tokens()
+  lst <- vector("list") # empty list
   
   if(n <= 200) { # calculate number of quires
     rq = 1
@@ -41,15 +41,13 @@ wait_search <- function(s, t, id, inu = NULL, uids, n) {
     inu <- floor((1500)/rq)
   }
   
-  lst <- vector("list", length = ceiling((t-s+1)/inu)+5) # empty list
-  
   gt <- function(st, en) {
     tryCatch(
       rt <- rtweet::get_timeline(uids[st:en], 
                                  n = n, 
                                  token = rtweet::bearer_token(), 
                                  check = F),
-      error = function(e) NULL
+      error = function(e) NA
     )
   }
   
@@ -63,9 +61,8 @@ wait_search <- function(s, t, id, inu = NULL, uids, n) {
     if(e > t) {
       e <- t
     } 
-    time_diff <- 911L
     time_s <- Sys.time()
-    lst[[i]] <- tryCatch(gt(st = s, en = e), error = function(e) NULL)
+    lst[[i]] <- gt(st = s, en = e)
     time_e <- Sys.time()
     time_diff <- as.numeric(time_e - time_s, units = "secs")
     #s <- e + 1 
@@ -76,9 +73,9 @@ wait_search <- function(s, t, id, inu = NULL, uids, n) {
     }
     
     i <- i + 1
-    if (s < t & time_diff < 910L) {
-      message(paste0("waiting about ", (910L - time_diff)/60L, " minutes"))
-      Sys.sleep(910L - time_diff)
+    if (s < t & time_diff < 910) {
+      message(paste0("waiting about ", (910 - time_diff)/60, " minutes"))
+      Sys.sleep(910 - time_diff)
     }
   }
   #lst <- do.call("rbind", lst)
@@ -86,12 +83,13 @@ wait_search <- function(s, t, id, inu = NULL, uids, n) {
 }
 
 library(lubridate)
+library(rtweet)
 
 u <- rtweet::get_timeline(df2$screen_name[1000], n = 100)
 
-user_tweets <- wait_search(s = 500, t = 1027, id = "screen_name", uids = df2$screen_name, n = 3200)
+user_tweets <- wait_search(s = 1, t = 1027, id = "screen_name", uids = df2$screen_name, n = 600)
 
-user_tweets3 <- subset(user_tweets2, !(status_id %in% user_tweets$status_id))
+#user_tweets3 <- subset(user_tweets2, !(status_id %in% user_tweets$status_id))
 
 user_tweets2 <- do.call("rbind", user_tweets)
 
@@ -102,10 +100,11 @@ user_tweets3 <- user_tweets[!duplicated(user_tweets$status_id), ]
 
 user_tweets4 <- dplyr::left_join(user_tweets3, df2[, -3], by = "user_id")
 
-saveRDS(user_tweets, "data/cong_politician_tweets_2020-10-27.rds")
+saveRDS(user_tweets2, "data/cong_politician_tweets_2021-4-28.rds")
+
 saveRDS(user_tweets3, "data/cong_politician_tweets_2020-4-16.rds")
 
-user_tweets <- readRDS("data/cong_politician_tweets_2020-10-27.rds")
+user_tweets <- readRDS("data/cong_politician_tweets_2020-3-12.rds")
 
 rtweet::write_as_csv(user_tweets4, "data/cong_politician_tweets.csv")
 
