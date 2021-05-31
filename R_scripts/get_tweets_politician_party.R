@@ -87,7 +87,7 @@ library(rtweet)
 
 u <- rtweet::get_timeline(df2$screen_name[1000], n = 100)
 
-user_tweets <- wait_search(s = 1, t = 1027, id = "screen_name", uids = df2$screen_name, n = 600)
+user_tweets <- wait_search(s = 1, t = 1027, id = "screen_name", uids = df2$screen_name, n = 1200)
 
 #user_tweets3 <- subset(user_tweets2, !(status_id %in% user_tweets$status_id))
 
@@ -100,7 +100,7 @@ user_tweets3 <- user_tweets[!duplicated(user_tweets$status_id), ]
 
 user_tweets4 <- dplyr::left_join(user_tweets3, df2[, -3], by = "user_id")
 
-saveRDS(user_tweets2, "data/cong_politician_tweets_2021-4-28.rds")
+saveRDS(user_tweets2, "data/cong_politician_tweets_2021-5-28.rds")
 
 saveRDS(user_tweets3, "data/cong_politician_tweets_2020-4-16.rds")
 
