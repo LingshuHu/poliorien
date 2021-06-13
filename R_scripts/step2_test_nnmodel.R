@@ -56,14 +56,16 @@ pu <- rbind(dem2, rep2)
 pu2 <- group_by(pu, user_id) %>% summarise(n = n())
 pu2 <- ungroup(pu2)
 repeated <- pu2[pu2$n > 1, ]
-pu_rept <- pu[pu$user_id %in% repeated$user_id, ]
-pu_clear <- pu[!pu$user_id %in% repeated$user_id, ]
+#pu_rept <- pu[pu$user_id %in% repeated$user_id, ]
+#pu_clear <- pu[!pu$user_id %in% repeated$user_id, ]
 pt_clear <- pt2[!pt2$user_id %in% repeated$user_id, ]
 
 pt_pred <- rtweet::read_twitter_csv("data/test_users_from_profile_party_proba.csv")
 
 pt_clear <- dplyr::inner_join(pt_clear, pt_pred[, c("status_id", "pred_proba")], by = "status_id")
-usr <- pt_clear
+saveRDS(pt_clear, "data/test_users_from_profile_preprocessed.rds")
+usr <- readRDS("data/test_users_from_profile_preprocessed.rds")
+
 ########################## get pred data ##############################
 party3 <- function(x) {
   if (x < 0.4) {p = "D"}
@@ -75,6 +77,14 @@ party3 <- function(x) {
 getmode <- function(v) {
   uniqv <- unique(v)
   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+## only when R or D is more than 50%. Don't use this one
+getmode <- function(v) {
+  if (length(v[v=="D"])/length(v) > 0.5) p = "D" 
+  else if (length(v[v=="R"])/length(v) > 0.5) p = "R"
+  else p = "N"
+  return(p)
 }
 
 library(dplyr)
@@ -91,7 +101,7 @@ usr30 <- vector("list", length = length(usr_id))
 for (i in seq_along(usr_id)) {
   df <- subset(usr, screen_name == usr_id[i])
   if (nrow(df) > 50) {
-    set.seed(1234)
+    set.seed(123)
     df <- dplyr::sample_n(df, 50)
   }
   usr30[[i]] <- df
@@ -106,18 +116,19 @@ usr30_party <- group_by(usr30, screen_name) %>% summarise(user_partyc = getmode(
 
 usr30_user <- usr30[!duplicated(usr30$screen_name), ]
 usr30_user <- dplyr::left_join(usr30_user, usr30_party, by = "screen_name")
-#usr30_user <- dplyr::left_join(usr30_user, usr30_party2, by = "screen_name")
-### calcualte accuracy
-usr30_user_u <- subset(usr30_user, Typical == "UT")
-usr30_user_u$Party <- "N"
-usr30_user_t <- subset(usr30_user, Typical == "T")
-usr30_user <- rbind(usr30_user_t, usr30_user_u)
+
 
 sum(usr30_user$user_partyc == usr30_user$Party, na.rm = T) / nrow(usr30_user) *100
 
 
 MLmetrics::F1_Score(usr30_user$Party, usr30_user$user_partyc, positive = NULL)
+table(usr30_user$user_partyc)
 
 
 x <- usr30_user[, c("Party", "partyc")]
-
+#usr30_user <- dplyr::left_join(usr30_user, usr30_party2, by = "screen_name")
+### calcualte accuracy
+usr30_user_u <- subset(usr30_user, Typical == "UT")
+usr30_user_u$Party <- "N"
+usr30_user <- subset(usr30_user, Typical == "T")
+usr30_user <- rbind(usr30_user_t, usr30_user_u)
