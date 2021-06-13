@@ -116,6 +116,77 @@ user$screen_name[72]
 
 which(df$user_id == user$user_id[69])
 
+########################################################################
+############# Combine politician tweets from different times ###########
+df1 <- readRDS("data/cong_politician_tweets_2020-3-12.rds")
+df2 <- readRDS("data/cong_politician_tweets_2020-7-5.rds")
+
+df <- rbind(df1, df2[!df2$status_id %in% df1$status_id, ])
+
+rm(df1)
+rm(df2)
+gc(reset = T)
+
+df3 <- readRDS("data/cong_politician_tweets_2020-10-27.rds")
+df <- rbind(df, df3[!df3$status_id %in% df$status_id, ])
+rm(df3)
+gc(reset = T)
+
+df4 <- readRDS("data/cong_politician_tweets_2021-2-11.rds")
+df <- rbind(df, df4[!df4$status_id %in% df$status_id, ])
+rm(df4)
+gc(reset = T)
+
+saveRDS(df, "data/cong_politician_tweets_2020-3-12-2021-2-11.rds")
+
+files <- list.files("data", pattern = ".*2021.*rds", full.names = TRUE)
+lst <- vector("list", length = length(files[3:8]))
+for (i in seq_along(files[3:8])) {
+  lst[[i]] <- readRDS(files[3:8][i])
+}
+df5 <- do.call("rbind", lst)
+rm(lst)
+gc(reset = T)
+df5 <- df5[!duplicated(df5$status_id), ]
+df <- readRDS("data/cong_politician_tweets_2020-3-12-2021-2-11.rds")
+df <- rbind(df, df5[!df5$status_id %in% df$status_id, ])
+rm(df5)
+gc(reset = T)
+
+saveRDS(df, "data/cong_politician_tweets_2020-3-12-2021-5-28.rds")
+
+df <- readRDS("data/cong_politician_tweets_2020-3-12-2021-5-28.rds")
+
+dfp <- dplyr::left_join(df[,1:5], df2[, c("screen_name", "party")], by = "screen_name")
+rm(df)
+gc(reset = T)
+table(dfp$party)
+
+dfp2 <- dfp[is.na(dfp$party),]
+dfp2 <- dplyr::left_join(dfp2[,1:5], df2[, c("user_id", "party")], by = "user_id")
+dfp3 <- dfp2[is.na(dfp2$party),]
+
+dfp <- dfp[!is.na(dfp$party),]
+dfp <- rbind(dfp, dfp3)
+
+rtweet::write_as_csv(dfp, "data/cong_politician_tweets_2020-3-12-2021-5-28_text_party.csv")
+
+## balanced D and R
+dfpD <- subset(dfp, party == "D")
+dfpR <- subset(dfp, party == "R")
+
+set.seed(123)
+dfpD <- dplyr::sample_n(dfpD, size = nrow(dfpR), replace = F)
+
+dfp_balance <- rbind(dfpD, dfpR)
+
+# shuffle
+set.seed(123)
+dfp_balance <- dplyr::sample_n(dfp_balance, size = nrow(dfp_balance), replace = FALSE)
+
+rtweet::write_as_csv(dfp_balance, "data/cong_politician_tweets_2020-3-12-2021-5-28_text_party_balanced.csv")
+
+
 #########################################################################
 
 ?get_timeline
